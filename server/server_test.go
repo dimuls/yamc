@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
-	"github.com/someanon/yams/store"
+	"github.com/someanon/yamc/store"
 )
 
 var _ = Describe("Router", func() {
@@ -702,7 +702,7 @@ func beCall(method interface{}, args ...interface{}) types.GomegaMatcher {
 
 func funcToName(f interface{}) string {
 	name := runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
-	name = strings.TrimPrefix(name, "github.com/someanon/yams/")
+	name = strings.TrimPrefix(name, "github.com/someanon/yamc/")
 	name = strings.TrimSuffix(name, "-fm")
 	return name
 }

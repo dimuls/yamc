@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/someanon/yams/server"
-	"github.com/someanon/yams/store"
+	"github.com/someanon/yamc/server"
+	"github.com/someanon/yamc/store"
 )
 
 func main() {

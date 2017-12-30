@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/someanon/yams/store"
+	"github.com/someanon/yamc/store"
 	"gopkg.in/yaml.v2"
 )
 

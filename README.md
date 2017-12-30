@@ -1,4 +1,4 @@
-# yams
+# yamc
 Yet another memory cache.
 
 Features:
