@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -63,11 +62,6 @@ func (s *server) putKey(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, errKeyRequired)
 		return
 	}
-	valueBts, err := ioutil.ReadAll(c.Request.Body)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
 	ttlStr, exists := c.GetQuery("ttl")
 	if !exists {
 		c.AbortWithError(http.StatusBadRequest, errTTLRrequired)
@@ -76,6 +70,11 @@ func (s *server) putKey(c *gin.Context) {
 	ttl, err := time.ParseDuration(ttlStr)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, errInvalidTTL)
+		return
+	}
+	valueBts, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 	s.store.Set(key, string(valueBts), ttl)
@@ -118,16 +117,6 @@ func (s *server) putList(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, errKeyRequired)
 		return
 	}
-	listYAML, err := ioutil.ReadAll(c.Request.Body)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	var list []string
-	if err := yaml.Unmarshal(listYAML, &list); err != nil {
-		c.AbortWithError(http.StatusBadRequest, errInvalidListYAML)
-		return
-	}
 	ttlStr, exists := c.GetQuery("ttl")
 	if !exists {
 		c.AbortWithError(http.StatusBadRequest, errTTLRrequired)
@@ -136,6 +125,16 @@ func (s *server) putList(c *gin.Context) {
 	ttl, err := time.ParseDuration(ttlStr)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, errInvalidTTL)
+		return
+	}
+	listYAML, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	var list []string
+	if err := yaml.Unmarshal(listYAML, &list); err != nil {
+		c.AbortWithError(http.StatusBadRequest, errInvalidListYAML)
 		return
 	}
 	s.store.ListSet(key, list, ttl)
@@ -156,7 +155,7 @@ func (s *server) getDict(c *gin.Context) {
 	value, err := s.store.DictGet(key, dkey)
 	if err != nil {
 		switch err {
-		case store.ErrKeyNotExists, store.ErrNotDictItem:
+		case store.ErrKeyNotExists, store.ErrNotDictItem, store.ErrDictKeyNotExists:
 			c.AbortWithStatus(http.StatusNotFound)
 		default:
 			c.AbortWithError(http.StatusInternalServerError, err)
@@ -171,16 +170,6 @@ func (s *server) putDict(c *gin.Context) {
 		c.AbortWithError(http.StatusBadRequest, errKeyRequired)
 		return
 	}
-	dictYAML, err := ioutil.ReadAll(c.Request.Body)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	var dict map[string]string
-	if err := yaml.Unmarshal(dictYAML, &dict); err != nil {
-		c.AbortWithError(http.StatusBadRequest, errInvalidDictYAML)
-		return
-	}
 	ttlStr, exists := c.GetQuery("ttl")
 	if !exists {
 		c.AbortWithError(http.StatusBadRequest, errTTLRrequired)
@@ -189,6 +178,16 @@ func (s *server) putDict(c *gin.Context) {
 	ttl, err := time.ParseDuration(ttlStr)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, errInvalidTTL)
+		return
+	}
+	dictYAML, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	var dict map[string]string
+	if err := yaml.Unmarshal(dictYAML, &dict); err != nil {
+		c.AbortWithError(http.StatusBadRequest, errInvalidDictYAML)
 		return
 	}
 	s.store.DictSet(key, dict, ttl)
@@ -206,5 +205,10 @@ func (s *server) delete(c *gin.Context) {
 }
 
 func (s *server) getKeys(c *gin.Context) {
-	c.String(http.StatusOK, strings.Join(s.store.Keys(), "\n"))
+	keysBytes, err := yaml.Marshal(s.store.Keys())
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	c.String(http.StatusOK, "%s", keysBytes)
 }
