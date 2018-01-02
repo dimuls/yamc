@@ -35,12 +35,14 @@ var (
 	ErrInvalidServerResponse = errors.New("invalid server response")
 )
 
+// Client is a memory cache server client
 type Client struct {
 	method string
 	url    *gourl.URL
 	query  gourl.Values
 }
 
+// NewClient constructs memory cache server client
 func NewClient(url string) (Client, error) {
 	c := Client{}
 	var err error
@@ -53,6 +55,7 @@ func NewClient(url string) (Client, error) {
 	return c, nil
 }
 
+// doReq performs request according Client data and given body
 func (c Client) doReq(body []byte) (string, error) {
 	req, err := http.NewRequest(c.method, c.url.String(), bytes.NewReader(body))
 	if err != nil {
@@ -82,6 +85,7 @@ func (c Client) doReq(body []byte) (string, error) {
 	return "", ErrUnknownResponseStatus
 }
 
+// Get gets value by key
 func (c Client) Get(key string) (string, error) {
 	c.method = http.MethodGet
 	c.url.Path = keyPath
@@ -90,6 +94,7 @@ func (c Client) Get(key string) (string, error) {
 	return c.doReq(nil)
 }
 
+// Set sets key to value with time to live ttl
 func (c Client) Set(key string, value string, ttl time.Duration) error {
 	c.method = http.MethodPut
 	c.url.Path = keyPath
@@ -100,6 +105,7 @@ func (c Client) Set(key string, value string, ttl time.Duration) error {
 	return err
 }
 
+// ListGet gets value by key and index
 func (c Client) ListGet(key string, index uint) (string, error) {
 	c.method = http.MethodGet
 	c.url.Path = listPath
@@ -109,6 +115,7 @@ func (c Client) ListGet(key string, index uint) (string, error) {
 	return c.doReq(nil)
 }
 
+// ListSet sets string list to the key
 func (c Client) ListSet(key string, list []string, ttl time.Duration) error {
 	c.method = http.MethodPut
 	c.url.Path = listPath
@@ -123,6 +130,7 @@ func (c Client) ListSet(key string, list []string, ttl time.Duration) error {
 	return err
 }
 
+// DictGet returns value by key and dkey
 func (c Client) DictGet(key string, dkey string) (string, error) {
 	c.method = http.MethodGet
 	c.url.Path = dictPath
@@ -132,6 +140,7 @@ func (c Client) DictGet(key string, dkey string) (string, error) {
 	return c.doReq(nil)
 }
 
+// DictSet sets string dict to the key
 func (c Client) DictSet(key string, dict map[string]string, ttl time.Duration) error {
 	c.method = http.MethodPut
 	c.url.Path = dictPath
@@ -146,6 +155,7 @@ func (c Client) DictSet(key string, dict map[string]string, ttl time.Duration) e
 	return err
 }
 
+// Remove removes value by key
 func (c Client) Remove(key string) error {
 	c.method = http.MethodDelete
 	c.url.Path = keyPath
@@ -155,6 +165,7 @@ func (c Client) Remove(key string) error {
 	return err
 }
 
+// Keys returns all keys list
 func (c Client) Keys() ([]string, error) {
 	c.method = http.MethodGet
 	c.url.Path = keysPath

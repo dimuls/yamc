@@ -5,12 +5,14 @@ import (
 	"time"
 )
 
+// ticker is timer ticker, runs function f every period time
 type ticker struct {
 	period  time.Duration
 	f       func()
 	stopper chan struct{}
 }
 
+// newTicker constructs new ticker with given period and working function f. Returns error if f is nil
 func newTicker(period time.Duration, f func()) (*ticker, error) {
 	if f == nil {
 		return nil, errors.New("nil ticker function")
@@ -22,10 +24,12 @@ func newTicker(period time.Duration, f func()) (*ticker, error) {
 	}, nil
 }
 
+// running determines if ticker is running
 func (t *ticker) running() bool {
 	return t.stopper != nil
 }
 
+// start starts ticker. Can be called multiple times. Returns error if ticker is already started
 func (t *ticker) start() error {
 	if t.running() {
 		return errors.New("already started")
@@ -46,6 +50,7 @@ func (t *ticker) start() error {
 	return nil
 }
 
+// stop stops ticker. Can be called multiple times. Returns errors if ticker already stopped
 func (t *ticker) stop() error {
 	if !t.running() {
 		return errors.New("already stopped")

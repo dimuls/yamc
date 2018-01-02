@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// NewRouter creates gin router with server with binded routes and handlers
 func NewRouter(st store.Store) *gin.Engine {
 	s := &server{store: st}
 
@@ -33,10 +34,13 @@ func NewRouter(st store.Store) *gin.Engine {
 	return r
 }
 
+// server is memory cache server
 type server struct {
 	store store.Store
 }
 
+// getKey handles GET /key request. This request corresponds to store's Get method. Required params: key.
+// Returns value corresponded to key
 func (s *server) getKey(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
@@ -56,6 +60,7 @@ func (s *server) getKey(c *gin.Context) {
 	c.String(http.StatusOK, value)
 }
 
+// putKey handles PUT /key request. This request corresponds to store's Set method. Required params: key, ttl
 func (s *server) putKey(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
@@ -81,6 +86,8 @@ func (s *server) putKey(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// getList handles GET /list request. This request corresponds to store's ListGet method. Required params: key, index.
+// Returns value corresponded to key and index
 func (s *server) getList(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
@@ -111,6 +118,8 @@ func (s *server) getList(c *gin.Context) {
 	c.String(http.StatusOK, value)
 }
 
+// putKey handles PUT /list request. This request corresponds to store's ListSet method. Required params: key, ttl
+// and YAML formatted list in body
 func (s *server) putList(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
@@ -141,6 +150,8 @@ func (s *server) putList(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// getDict handles GET /dict request. This request corresponds to store's DictGet method. Required params: key, dkey.
+// Returns value corresponded to key and dkey
 func (s *server) getDict(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
@@ -164,6 +175,8 @@ func (s *server) getDict(c *gin.Context) {
 	c.String(http.StatusOK, value)
 }
 
+// putDict handles PUT /dict request. This request corresponds to store's DictSet method. Required params: key, ttl
+// and YAML formatted dict in body
 func (s *server) putDict(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
@@ -194,6 +207,8 @@ func (s *server) putDict(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// delete handles DELETE /key, DELETE /list, DELETE /dict requests. This request corresponds store's Remove method.
+// Required params: key
 func (s *server) delete(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
@@ -204,6 +219,8 @@ func (s *server) delete(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// getKeys handles GET /keys request. This request corresponds to store's Keys method.
+// Returns YAML formatted body with keys list
 func (s *server) getKeys(c *gin.Context) {
 	keysBytes, err := yaml.Marshal(s.store.Keys())
 	if err != nil {

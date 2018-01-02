@@ -2,6 +2,7 @@ package server
 
 import "errors"
 
+// e is a shortcut for string error constructor
 func e(s string) error {
 	return errors.New(s)
 }

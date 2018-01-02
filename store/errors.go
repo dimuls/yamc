@@ -1,16 +1,19 @@
 package store
 
+// StoreError is a store error
 type StoreError struct {
 	Err     string
 	Code    int
 	Details string
 }
 
+// detailed adds details to error
 func (e StoreError) detailed(details string) StoreError {
 	e.Details = details
 	return e
 }
 
+// Error returns error's string representation
 func (e StoreError) Error() string {
 	s := e.Err
 	if e.Details != "" {
@@ -19,6 +22,7 @@ func (e StoreError) Error() string {
 	return s
 }
 
+// e is StoreError constructor
 func e(code int, err string) StoreError {
 	return StoreError{Err: err, Code: code}
 }
