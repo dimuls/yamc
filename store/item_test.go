@@ -102,12 +102,12 @@ var _ = Describe("newListItem", func() {
 })
 
 var _ = Describe("listItem", func() {
-	Specify("listItem returns value", func() {
+	Specify("listValue returns value", func() {
 		li := newListItem([]string{"a", "b"}, time.Time{})
 		Expect(li.listValue(0)).To(Equal("a"))
 		Expect(li.listValue(1)).To(Equal("b"))
 	})
-	Describe("listValue error", func() {
+	Describe("listValue errors", func() {
 		Specify("when nil list", func() {
 			li := newListItem(nil, time.Time{})
 			_, err := li.listValue(2)
@@ -175,11 +175,11 @@ var _ = Describe("newDictItem", func() {
 })
 
 var _ = Describe("dictItem", func() {
-	Specify("dictItem returns value", func() {
+	Specify("dictValue returns value", func() {
 		li := newDictItem(map[string]string{"a": "b"}, time.Time{})
 		Expect(li.dictValue("a")).To(Equal("b"))
 	})
-	Describe("dictValue error", func() {
+	Describe("dictValue errors", func() {
 		Specify("when nil dict", func() {
 			li := newDictItem(nil, time.Time{})
 			_, err := li.dictValue("a")

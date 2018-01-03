@@ -83,7 +83,7 @@ func (li listItem) listValue(i int) (string, error) {
 	return li.list[i], nil
 }
 
-// listItem is a strings to strings map item
+// dictItem is a strings to strings map item
 type dictItem struct {
 	baseItem
 	dict map[string]string
@@ -99,8 +99,8 @@ func newDictItem(dict map[string]string, expiry time.Time) dictItem {
 	}
 }
 
-// dictValue returns listItem value by key k
-func (di dictItem) dictItem(k string) (string, error) {
+// dictValue returns dictItem value by key k
+func (di dictItem) dictValue(k string) (string, error) {
 	if di.dict == nil {
 		return "", ErrDictKeyNotExists
 	}
