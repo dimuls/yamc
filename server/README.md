@@ -28,6 +28,9 @@ Return value by key
     * **Code:** 400 Bad request <br />
     **Reason:** absent key
     
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
+    
     * **Code:** 404 Not found <br />
     **Reason:** key not found or not scalar type
     
@@ -35,7 +38,7 @@ Return value by key
 
 * **Sample Call:**
 
-    `curl -X GET "http://127.0.0.1/key?key=k"`
+    `curl -u test:test -X GET "http://127.0.0.1/key?key=k"`
   
 ## Set key
 Set key to value
@@ -65,11 +68,14 @@ Set key to value
     * **Code:** 400 Bad request <br />
     **Reason:** absent or invalid key or ttl
     
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
+    
     * **Code:** 500 Internal server error
 
 * **Sample Call:**
 
-    `curl -X PUT -d "value" "http://127.0.0.1/key?key=k&ttl=60s"`
+    `curl -u test:test -X PUT -d "value" "http://127.0.0.1/key?key=k&ttl=60s"`
   
 ## Get list item
 Get list value by key and index 
@@ -95,6 +101,9 @@ Get list value by key and index
 
     * **Code:** 400 Bad request <br />
     **Reason:** absent or invalid key or index
+    
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
   
     * **Code:** 404 Not found <br />
     **Reason:** list not found; not list item; index in list not exists (too big index or empty list)
@@ -103,7 +112,7 @@ Get list value by key and index
 
 * **Sample Call:**
 
-    `curl -X GET "http://127.0.0.1/list?key=k&index=0"`
+    `curl -u test:test -X GET "http://127.0.0.1/list?key=k&index=0"`
 
 ## Set list
 Set key to list
@@ -132,12 +141,15 @@ Set key to list
 
     * **Code:** 400 Bad request <br />
     **Reason:** absent or invalid key or ttl; invalid list YAML
+    
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
   
     * **Code:** 500 Internal server error
 
 * **Sample Call:**
 
-    `curl -X PUT -d $"- a\n- b\n" "http://127.0.0.1/key?key=k&ttl=60s"`
+    `curl -u test:test -X PUT -d $"- a\n- b\n" "http://127.0.0.1/list?key=k&ttl=60s"`
 
 ## Get dictionary item
 Get dictionary value by key and dictionary key
@@ -163,6 +175,9 @@ Get dictionary value by key and dictionary key
 
     * **Code:** 400 Bad request <br />
     **Reason:** absent key or dkey
+    
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
   
     * **Code:** 404 Not found <br />
     **Reason:** dictionary not found; dkey in dictionary not found
@@ -171,7 +186,7 @@ Get dictionary value by key and dictionary key
 
 * **Sample Call:**
 
-    `curl -X GET "http://127.0.0.1/list?key=k&dkey=dk"`
+    `curl -u test:test -X GET "http://127.0.0.1/dict?key=k&dkey=dk"`
 
 ## Set dictionary
 Set key to dictionary
@@ -200,12 +215,15 @@ Set key to dictionary
 
     * **Code:** 400 Bad request <br />
     **Reason:** absent or invalid key or ttl; invalid dict's YAML
+    
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
   
     * **Code:** 500 Internal server error
 
 * **Sample Call:**
 
-    `curl -X PUT -d $"a: b\nc: d\n" "http://127.0.0.1/key?key=k&ttl=60s"`
+    `curl -u test:test -X PUT -d $"a: b\nc: d\n" "http://127.0.0.1/dict?key=k&ttl=60s"`
 
 ## Remove key
 Remove value or list or dictionary. Paths are not bound to the type. Any path removes any key type: value, list or dict.
@@ -229,10 +247,13 @@ Remove value or list or dictionary. Paths are not bound to the type. Any path re
 
     * **Code:** 400 Bad request <br />
     **Reason:** absent key
+    
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
 
 * **Sample Call:**
 
-    `curl -X DELETE "http://127.0.0.1/key?key=k"`
+    `curl -u test:test -X DELETE "http://127.0.0.1/key?key=k"`
     
 ## Get keys
 Get all keys list encoded in YAML
@@ -247,9 +268,12 @@ Get all keys list encoded in YAML
     **Content:** YAML encoded list
 
 * **Error Response:**
+    
+    * **Code:** 401 Unauthorized <br />
+      **Reason:** absent or wrong authorization header
 
     * **Code:** 500 Internal server error
 
 * **Sample Call:**
 
-    `curl -X GET "http://127.0.0.1/keys"`
+    `curl -u test:test -X GET "http://127.0.0.1/keys"`

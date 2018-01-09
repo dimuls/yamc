@@ -17,7 +17,7 @@ func (e StoreError) detailed(details string) StoreError {
 func (e StoreError) Error() string {
 	s := e.Err
 	if e.Details != "" {
-		s += ":" + e.Details
+		s += ": " + e.Details
 	}
 	return s
 }
@@ -30,7 +30,6 @@ func e(code int, err string) StoreError {
 var (
 	// store construction errors
 	ErrInvalidParams = e(1, "invalid params")
-	ErrNilClock      = e(2, "nil clock")
 
 	// item errors
 	ErrNotKeyItem  = e(10, "not key item")
@@ -45,9 +44,21 @@ var (
 	// other errors
 	ErrInvalidListIndex = e(30, "invalid list index")
 
-	// cleaner errors
-	ErrFailedToCreateCleaner = e(40, "failed to create cleaner")
-	ErrFailedToStartCleaner  = e(41, "failed to start cleaner")
-	ErrCleanerNotStartedYet  = e(42, "cleaner not started yet")
-	ErrFailedToStopCleaner   = e(43, "failed to stop cleaner")
+	// cleaning errors
+	ErrFailToCreateCleaning  = e(40, "fail to create cleaning")
+	ErrFailToStartCleaning   = e(41, "fail to start cleaning")
+	ErrCleaningNotStartedYet = e(42, "cleaning not started yet")
+	ErrFailToStopCleaning    = e(43, "fail to stop cleaning")
+
+	// dumping errors
+	ErrFailToCreateDumping = e(50, "fail to create dumping")
+	ErrFailToStartDumping  = e(51, "fail to start dumping")
+	ErrDumperNotStartedYet = e(52, "dumping not started yet")
+	ErrFailToStopDumping   = e(53, "fail to stop dumping")
+
+	// load errors
+	ErrFailOpenDumpFile     = e(60, "fail to open dump file")
+	ErrFailToDumpItems      = e(61, "fail to dump items")
+	ErrFailToDecodeDumpFile = e(61, "fail to decode dump file")
+	ErrFailToCloseDumpFile  = e(62, "fail to close dump file")
 )

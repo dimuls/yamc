@@ -19,7 +19,7 @@ var _ = Describe("newTicker", func() {
 		Expect(t.period).To(Equal(time.Nanosecond))
 		Expect(t.f).ToNot(BeNil())
 		Expect(t.stopper).To(BeNil())
-		Expect(t.running()).To(BeFalse())
+		Expect(t.isRunning()).To(BeFalse())
 	})
 })
 
@@ -31,11 +31,11 @@ var _ = Specify("Ticker", func() {
 		ticks++
 	})
 	Expect(err).ToNot(HaveOccurred())
-	Expect(t.running()).To(BeFalse())
+	Expect(t.isRunning()).To(BeFalse())
 
 	By("starting ticker")
 	Expect(t.start()).To(Succeed())
-	Expect(t.running()).To(BeTrue())
+	Expect(t.isRunning()).To(BeTrue())
 
 	time.Sleep(110 * time.Millisecond)
 
@@ -44,7 +44,7 @@ var _ = Specify("Ticker", func() {
 
 	By("trying to start one more time")
 	Expect(t.start()).ToNot(Succeed())
-	Expect(t.running()).To(BeTrue())
+	Expect(t.isRunning()).To(BeTrue())
 
 	time.Sleep(110 * time.Millisecond)
 
@@ -53,7 +53,7 @@ var _ = Specify("Ticker", func() {
 
 	By("stopping timer")
 	Expect(t.stop()).To(Succeed())
-	Expect(t.running()).To(BeFalse())
+	Expect(t.isRunning()).To(BeFalse())
 
 	time.Sleep(110 * time.Millisecond)
 
@@ -62,5 +62,5 @@ var _ = Specify("Ticker", func() {
 
 	By("stopping timer second time")
 	Expect(t.stop()).ToNot(Succeed())
-	Expect(t.running()).To(BeFalse())
+	Expect(t.isRunning()).To(BeFalse())
 })

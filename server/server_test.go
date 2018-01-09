@@ -765,13 +765,23 @@ func (s *testStore) expectKeys() {
 	ExpectWithOffset(1, s.popCall()).To(beCall(s.Keys))
 }
 
-func (s *testStore) StartCleaner() error {
-	s.newCall(s.StartCleaner)
+func (s *testStore) StartCleaning() error {
+	s.newCall(s.StartCleaning)
 	return s.error
 }
 
-func (s *testStore) StopCleaner() error {
-	s.newCall(s.StopCleaner)
+func (s *testStore) StopCleaning() error {
+	s.newCall(s.StopCleaning)
+	return s.error
+}
+
+func (s *testStore) StartDumping() error {
+	s.newCall(s.StartDumping)
+	return s.error
+}
+
+func (s *testStore) StopDumping() error {
+	s.newCall(s.StopDumping)
 	return s.error
 }
 

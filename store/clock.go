@@ -4,13 +4,13 @@ import "time"
 
 // Clock is a now time provider
 type Clock interface {
-	Now() time.Time
+	now() time.Time
 }
 
 // SystemClock is clock providing system time
 type SystemClock struct{}
 
-// Now returns current time
-func (_ SystemClock) Now() time.Time {
+// now returns current time
+func (_ SystemClock) now() time.Time {
 	return time.Now()
 }

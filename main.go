@@ -1,10 +1,10 @@
 package main
 
 import (
-	"flag"
 	"io/ioutil"
 	"time"
 
+	"github.com/alexflint/go-arg"
 	"github.com/gin-gonic/gin"
 	"github.com/someanon/yamc/server"
 	"github.com/someanon/yamc/store"
@@ -12,12 +12,22 @@ import (
 )
 
 func main() {
-	accountsPath := flag.String("accounts", "./accounts", "accounts file path")
-	cleaningPeriod := flag.Duration("cleaning-period", 60*time.Second, "store cleaning period")
 
-	flag.Parse()
+	var args struct {
+		AccountsPath   string        `arg:"--accounts-path" help:"accounts file path"`
+		CleaningPeriod time.Duration `arg:"--cleaning-period" help:"store cleaning period, must be >= 100ms"`
+		DumpingPeriod  time.Duration `arg:"--dumping-period" help:"store dumping period, must be >= 60s"`
+		DumpPath       string        `arg:"--dump-path" help:"store dump file path"`
+	}
 
-	accountsYAML, err := ioutil.ReadFile(*accountsPath)
+	args.AccountsPath = "./accounts"
+	args.CleaningPeriod = 60 * time.Second
+	args.DumpingPeriod = 60 * time.Second
+	args.DumpPath = "./dump"
+
+	arg.MustParse(&args)
+
+	accountsYAML, err := ioutil.ReadFile(args.AccountsPath)
 	if err != nil {
 		panic("failed to read accounts file: " + err.Error())
 	}
@@ -28,16 +38,21 @@ func main() {
 	}
 
 	p := store.Params{
-		CleaningPeriod: *cleaningPeriod,
+		CleaningPeriod: args.CleaningPeriod,
+		DumpingPeriod:  args.DumpingPeriod,
 	}
 
-	s, err := store.NewStore(p, store.SystemClock{})
+	s, err := store.NewStore(p, store.SystemClock{}, store.FileDumper(args.DumpPath))
 	if err != nil {
 		panic("unexpected store.NewStore() error: " + err.Error())
 	}
 
-	if err := s.StartCleaner(); err != nil {
-		panic("unexpected store.Store.StartCleaner() error: " + err.Error())
+	if err := s.StartCleaning(); err != nil {
+		panic("unexpected store.Store.StartCleaning() error: " + err.Error())
+	}
+
+	if err := s.StartDumping(); err != nil {
+		panic("unexpected store.Store.StartDumping() error: " + err.Error())
 	}
 
 	gin.SetMode("release")

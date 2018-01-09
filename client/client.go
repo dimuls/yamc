@@ -29,6 +29,7 @@ const (
 var (
 	// server side errors
 	ErrNotFound              = errors.New("key not found")
+	ErrUnauthorized          = errors.New("unauthorized")
 	ErrInvalidParams         = errors.New("invalid params")
 	ErrInternalServerError   = errors.New("internal server error")
 	ErrUnknownResponseStatus = errors.New("unknown response status")
@@ -37,14 +38,19 @@ var (
 
 // Client is a memory cache server client
 type Client struct {
-	method string
-	url    *gourl.URL
-	query  gourl.Values
+	method   string
+	url      *gourl.URL
+	login    string
+	password string
+	query    gourl.Values
 }
 
 // NewClient constructs memory cache server client
-func NewClient(url string) (Client, error) {
-	c := Client{}
+func NewClient(url string, login string, password string) (Client, error) {
+	c := Client{
+		login:    login,
+		password: password,
+	}
 	var err error
 	if c.url, err = gourl.Parse(url); err != nil {
 		return c, errors.New("failed to parse url: " + err.Error())
@@ -61,6 +67,7 @@ func (c Client) doReq(body []byte) (string, error) {
 	if err != nil {
 		return "", errors.New("failed to create http doReq: " + err.Error())
 	}
+	req.SetBasicAuth(c.login, c.password)
 	res, err := (&http.Client{}).Do(req)
 	if err != nil {
 		return "", errors.New("failed to do http doReq: " + err.Error())
@@ -77,6 +84,8 @@ func (c Client) doReq(body []byte) (string, error) {
 		return string(body), nil
 	case http.StatusNotFound:
 		return "", ErrNotFound
+	case http.StatusUnauthorized:
+		return "", ErrUnauthorized
 	case http.StatusBadRequest:
 		return "", ErrInvalidParams
 	case http.StatusInternalServerError:

@@ -15,32 +15,39 @@ type Store interface {
 	DictSet(key string, dict map[string]string, ttl time.Duration)
 	Remove(key string) error
 	Keys() []string
-	StartCleaner() error
-	StopCleaner() error
+	StartCleaning() error
+	StopCleaning() error
+	StartDumping() error
+	StopDumping() error
 }
 
 // store is a store implementation
 type store struct {
-	mutex   sync.RWMutex
-	params  Params
-	clock   Clock
-	items   map[string]item
-	cleaner *ticker
+	mutex    sync.RWMutex
+	params   Params
+	clock    Clock
+	dumper   Dumper
+	items    items
+	cleaning *ticker
+	dumping  *ticker
 }
 
 // NewStore constructs new store according params p with clock c. Returns error if params are invalid or clock is nil
-func NewStore(p Params, c Clock) (Store, error) {
-	if err := p.Validate(); err != nil {
+func NewStore(p Params, c Clock, d Dumper) (Store, error) {
+	err := p.Validate()
+	if err != nil {
 		return nil, ErrInvalidParams.detailed(err.Error())
-	}
-	if c == nil {
-		return nil, ErrNilClock
 	}
 	s := &store{
 		mutex:  sync.RWMutex{},
 		params: p,
 		clock:  c,
+		dumper: d,
 		items:  map[string]item{},
+	}
+	s.items, err = s.dumper.load()
+	if err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -116,7 +123,7 @@ func (s *store) Keys() []string {
 	defer s.mutex.RUnlock()
 	var keys []string
 	for k, i := range s.items {
-		if i.expired(s.clock.Now()) {
+		if i.expired(s.clock.now()) {
 			continue
 		}
 		keys = append(keys, k)
@@ -124,32 +131,62 @@ func (s *store) Keys() []string {
 	return keys
 }
 
-// StartCleaner starts expired items cleaner. Can be called multiple times
-func (s *store) StartCleaner() error {
+// StartCleaning starts periodical expired items cleaning. Can be called multiple times
+func (s *store) StartCleaning() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if s.cleaner == nil {
+	if s.cleaning == nil {
 		c, err := newTicker(s.params.CleaningPeriod, s.clean)
 		if err != nil {
-			return ErrFailedToCreateCleaner.detailed(err.Error())
+			return ErrFailToCreateCleaning.detailed(err.Error())
 		}
-		s.cleaner = c
+		s.cleaning = c
 	}
-	if err := s.cleaner.start(); err != nil {
-		return ErrFailedToStartCleaner.detailed(err.Error())
+	if err := s.cleaning.start(); err != nil {
+		return ErrFailToStartCleaning.detailed(err.Error())
 	}
 	return nil
 }
 
-// StopCleaner stops store cleaner. Can be called multiple times
-func (s *store) StopCleaner() error {
+// StopCleaning stops periodical expired items cleaning. Can be called multiple times
+func (s *store) StopCleaning() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	if s.cleaner == nil {
-		return ErrCleanerNotStartedYet
+	if s.cleaning == nil {
+		return ErrCleaningNotStartedYet
 	}
-	if err := s.cleaner.stop(); err != nil {
-		return ErrFailedToStopCleaner.detailed(err.Error())
+	if err := s.cleaning.stop(); err != nil {
+		return ErrFailToStopCleaning.detailed(err.Error())
+	}
+	return nil
+}
+
+// StartDumping starts periodical file dumping. Can be called multiple times
+func (s *store) StartDumping() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.dumping == nil {
+		d, err := newTicker(s.params.DumpingPeriod, s.dump)
+		if err != nil {
+			return ErrFailToCreateDumping.detailed(err.Error())
+		}
+		s.dumping = d
+	}
+	if err := s.dumping.start(); err != nil {
+		return ErrFailToStartDumping.detailed(err.Error())
+	}
+	return nil
+}
+
+// StopDumping stops periodical file dumping. Can be called multiple times
+func (s *store) StopDumping() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if s.dumping == nil {
+		return ErrDumperNotStartedYet
+	}
+	if err := s.dumping.stop(); err != nil {
+		return ErrFailToStopDumping.detailed(err.Error())
 	}
 	return nil
 }
@@ -157,7 +194,7 @@ func (s *store) StopCleaner() error {
 // get is item getter. Returns error if key is not exists
 func (s *store) get(key string) (item, error) {
 	i, exists := s.items[key]
-	if !exists || i.expired(s.clock.Now()) {
+	if !exists || i.expired(s.clock.now()) {
 		return nil, ErrKeyNotExists
 	}
 	return i, nil
@@ -168,13 +205,21 @@ func (s *store) clean() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for k, i := range s.items {
-		if i.expired(s.clock.Now()) {
+		if i.expired(s.clock.now()) {
 			delete(s.items, k)
 		}
 	}
 }
 
+func (s *store) dump() {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	if err := s.dumper.dump(s.items); err != nil {
+		// TODO: log error
+	}
+}
+
 // expiry computes expire time according clock's now and given ttl
 func (s *store) expiry(ttl time.Duration) time.Time {
-	return s.clock.Now().Add(ttl)
+	return s.clock.now().Add(ttl)
 }

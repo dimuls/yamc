@@ -24,14 +24,14 @@ func newTicker(period time.Duration, f func()) (*ticker, error) {
 	}, nil
 }
 
-// running determines if ticker is running
-func (t *ticker) running() bool {
+// isRunning determines if ticker is running
+func (t *ticker) isRunning() bool {
 	return t.stopper != nil
 }
 
 // start starts ticker. Can be called multiple times. Returns error if ticker is already started
 func (t *ticker) start() error {
-	if t.running() {
+	if t.isRunning() {
 		return errors.New("already started")
 	}
 	t.stopper = make(chan struct{})
@@ -52,7 +52,7 @@ func (t *ticker) start() error {
 
 // stop stops ticker. Can be called multiple times. Returns errors if ticker already stopped
 func (t *ticker) stop() error {
-	if !t.running() {
+	if !t.isRunning() {
 		return errors.New("already stopped")
 	}
 	close(t.stopper)

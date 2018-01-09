@@ -1,55 +1,64 @@
 package store
 
 import (
-	"fmt"
-	"strconv"
-	"testing"
+	"reflect"
+	"runtime"
+	"strings"
 	"time"
 
-	"github.com/kataras/go-errors"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 )
-
-type testClock time.Time
-
-func (tc testClock) Now() time.Time {
-	return time.Time(tc)
-}
 
 var _ = Describe("NewStore", func() {
 	Specify("invalid params error", func() {
-		_, err := NewStore(Params{CleaningPeriod: 100*time.Millisecond - time.Nanosecond}, testClock{})
-		Expect(err).To(MatchError(ErrInvalidParams.detailed("too small cleaning period")))
-	})
-	Specify("nil clock error", func() {
-		_, err := NewStore(Params{CleaningPeriod: 100 * time.Millisecond}, nil)
-		Expect(err).To(MatchError(ErrNilClock))
+		_, err := NewStore(Params{
+			CleaningPeriod: 100*time.Millisecond - time.Nanosecond,
+			DumpingPeriod:  60 * time.Second,
+		}, testClock{}, &testDumper{})
+		Expect(err).To(MatchError(ErrInvalidParams.detailed("too small cleaning period, must be >= 100ms")))
+		_, err = NewStore(Params{
+			CleaningPeriod: 100 * time.Millisecond,
+			DumpingPeriod:  60*time.Second - time.Nanosecond,
+		}, testClock{}, &testDumper{})
+		Expect(err).To(MatchError(ErrInvalidParams.detailed("too small dumping period, must be >= 60s")))
 	})
 	Specify("succeeds", func() {
-		p := Params{CleaningPeriod: 100 * time.Millisecond}
+		p := Params{
+			CleaningPeriod: 100 * time.Millisecond,
+			DumpingPeriod:  60 * time.Second,
+		}
 		c := testClock{}
-		si, err := NewStore(p, c)
-		s := si.(*store)
+		d := &testDumper{}
+		si, err := NewStore(p, c, d)
 		Expect(err).ToNot(HaveOccurred())
+		d.expectLoad()
+		s := si.(*store)
 		Expect(s).ToNot(BeNil())
 		Expect(s.params).To(Equal(p))
 		Expect(s.clock).To(Equal(c))
 		Expect(s.items).ToNot(BeNil())
 		Expect(s.items).To(BeEmpty())
-		Expect(s.cleaner).To(BeNil())
+		Expect(s.cleaning).To(BeNil())
 	})
 })
 
 var _ = Describe("store", func() {
 	var (
-		c Clock
+		c testClock
+		d *testDumper
 		s *store
 	)
 	BeforeEach(func() {
 		c = testClock(time.Now())
-		si, err := NewStore(Params{CleaningPeriod: 100 * time.Millisecond}, c)
+		d = &testDumper{}
+		si, err := NewStore(Params{
+			CleaningPeriod: 100 * time.Millisecond,
+			DumpingPeriod:  60 * time.Second,
+		}, c, d)
 		Expect(err).ToNot(HaveOccurred())
+		d.expectLoad()
 		s = si.(*store)
 	})
 	Describe("Get", func() {
@@ -78,27 +87,27 @@ var _ = Describe("store", func() {
 		Specify("creating new key", func() {
 			s.Set("a", "aa", time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newKeyItem("aa", c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newKeyItem("aa", c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new empty key", func() {
 			s.Set("", "aa", time.Nanosecond)
 			Expect(s.items).To(HaveKey(""))
-			Expect(s.items[""]).To(Equal(newKeyItem("aa", c.Now().Add(time.Nanosecond))))
+			Expect(s.items[""]).To(Equal(newKeyItem("aa", c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new key with empty value", func() {
 			s.Set("a", "", time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newKeyItem("", c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newKeyItem("", c.now().Add(time.Nanosecond))))
 		})
 		Specify("rewriting same type", func() {
-			s.items["a"] = newKeyItem("aa", c.Now())
+			s.items["a"] = newKeyItem("aa", c.now())
 			s.Set("a", "bb", time.Nanosecond)
-			Expect(s.items["a"]).To(Equal(newKeyItem("bb", c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newKeyItem("bb", c.now().Add(time.Nanosecond))))
 		})
 		Specify("rewriting other type", func() {
-			s.items["a"] = newListItem(nil, c.Now())
+			s.items["a"] = newListItem(nil, c.now())
 			s.Set("a", "bb", time.Nanosecond)
-			Expect(s.items["a"]).To(Equal(newKeyItem("bb", c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newKeyItem("bb", c.now().Add(time.Nanosecond))))
 		})
 	})
 	Describe("ListGet", func() {
@@ -132,32 +141,32 @@ var _ = Describe("store", func() {
 		Specify("creating new list", func() {
 			s.ListSet("a", []string{"a"}, time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newListItem([]string{"a"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newListItem([]string{"a"}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new list with empty key", func() {
 			s.ListSet("", []string{"a"}, time.Nanosecond)
 			Expect(s.items).To(HaveKey(""))
-			Expect(s.items[""]).To(Equal(newListItem([]string{"a"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items[""]).To(Equal(newListItem([]string{"a"}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new nil list", func() {
 			s.ListSet("a", nil, time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newListItem(nil, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newListItem(nil, c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new empty list", func() {
 			s.ListSet("a", []string{}, time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newListItem([]string{}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newListItem([]string{}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("rewriting same type", func() {
-			s.items["a"] = newListItem(nil, c.Now())
+			s.items["a"] = newListItem(nil, c.now())
 			s.ListSet("a", []string{"a"}, time.Nanosecond)
-			Expect(s.items["a"]).To(Equal(newListItem([]string{"a"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newListItem([]string{"a"}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("rewriting other type", func() {
-			s.items["a"] = newKeyItem("aa", c.Now())
+			s.items["a"] = newKeyItem("aa", c.now())
 			s.ListSet("a", []string{"a"}, time.Nanosecond)
-			Expect(s.items["a"]).To(Equal(newListItem([]string{"a"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newListItem([]string{"a"}, c.now().Add(time.Nanosecond))))
 		})
 	})
 	Describe("DictGet", func() {
@@ -191,32 +200,32 @@ var _ = Describe("store", func() {
 		Specify("creating new dict", func() {
 			s.DictSet("a", map[string]string{"b": "aa"}, time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{"b": "aa"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{"b": "aa"}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new dict with empty key", func() {
 			s.DictSet("", map[string]string{"b": "aa"}, time.Nanosecond)
 			Expect(s.items).To(HaveKey(""))
-			Expect(s.items[""]).To(Equal(newDictItem(map[string]string{"b": "aa"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items[""]).To(Equal(newDictItem(map[string]string{"b": "aa"}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new nil dict", func() {
 			s.DictSet("a", nil, time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newDictItem(nil, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newDictItem(nil, c.now().Add(time.Nanosecond))))
 		})
 		Specify("creating new empty dict", func() {
 			s.DictSet("a", map[string]string{}, time.Nanosecond)
 			Expect(s.items).To(HaveKey("a"))
-			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("rewriting same type", func() {
-			s.items["a"] = newDictItem(map[string]string{"b": "aa"}, c.Now())
+			s.items["a"] = newDictItem(map[string]string{"b": "aa"}, c.now())
 			s.DictSet("a", map[string]string{"cc": "dd"}, time.Nanosecond)
-			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{"cc": "dd"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{"cc": "dd"}, c.now().Add(time.Nanosecond))))
 		})
 		Specify("rewriting other type", func() {
-			s.items["a"] = newKeyItem("aa", c.Now())
+			s.items["a"] = newKeyItem("aa", c.now())
 			s.DictSet("a", map[string]string{"cc": "dd"}, time.Nanosecond)
-			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{"cc": "dd"}, c.Now().Add(time.Nanosecond))))
+			Expect(s.items["a"]).To(Equal(newDictItem(map[string]string{"cc": "dd"}, c.now().Add(time.Nanosecond))))
 		})
 	})
 	Describe("Remove", func() {
@@ -224,12 +233,12 @@ var _ = Describe("store", func() {
 			Expect(s.Remove("a")).To(MatchError(ErrKeyNotExists))
 		})
 		Specify("expired key", func() {
-			s.items["a"] = baseItem{expiry: c.Now().Add(-time.Nanosecond)}
+			s.items["a"] = baseItem{expiry: c.now().Add(-time.Nanosecond)}
 			Expect(s.Remove("a")).To(Succeed())
 			Expect(s.items).ToNot(HaveKey("a"))
 		})
 		Specify("not expired key", func() {
-			s.items["a"] = baseItem{expiry: c.Now().Add(time.Nanosecond)}
+			s.items["a"] = baseItem{expiry: c.now().Add(time.Nanosecond)}
 			Expect(s.Remove("a")).To(Succeed())
 			Expect(s.items).ToNot(HaveKey("a"))
 		})
@@ -239,33 +248,34 @@ var _ = Describe("store", func() {
 			Expect(s.Keys()).To(BeEmpty())
 		})
 		Specify("when all keys expired", func() {
-			s.items["a"] = baseItem{expiry: c.Now().Add(-time.Nanosecond)}
-			s.items["b"] = baseItem{expiry: c.Now()}
+			s.items["a"] = baseItem{expiry: c.now().Add(-time.Nanosecond)}
+			s.items["b"] = baseItem{expiry: c.now()}
 			Expect(s.Keys()).To(BeEmpty())
 		})
 		Specify("when not expired keys exists", func() {
-			s.items["a"] = baseItem{expiry: c.Now().Add(-time.Nanosecond)}
-			s.items["b"] = baseItem{expiry: c.Now()}
-			s.items["c"] = baseItem{expiry: c.Now().Add(time.Nanosecond)}
-			s.items["d"] = baseItem{expiry: c.Now().Add(2 * time.Nanosecond)}
+			s.items["a"] = baseItem{expiry: c.now().Add(-time.Nanosecond)}
+			s.items["b"] = baseItem{expiry: c.now()}
+			s.items["c"] = baseItem{expiry: c.now().Add(time.Nanosecond)}
+			s.items["d"] = baseItem{expiry: c.now().Add(2 * time.Nanosecond)}
 			Expect(s.Keys()).To(ConsistOf("c", "d"))
 		})
 	})
-	Specify("StartCleaner and StopCleaner", func() {
-		s.items["a"] = baseItem{expiry: c.Now().Add(-time.Nanosecond)}
-		s.items["b"] = baseItem{expiry: c.Now()}
-		s.items["c"] = baseItem{expiry: c.Now().Add(time.Nanosecond)}
+	Specify("StartCleaning and StopCleaning", func() {
+		defer s.StopCleaning()
+		s.items["a"] = baseItem{expiry: c.now().Add(-time.Nanosecond)}
+		s.items["b"] = baseItem{expiry: c.now()}
+		s.items["c"] = baseItem{expiry: c.now().Add(time.Nanosecond)}
 
 		By("not stated before")
-		Expect(s.cleaner).To(BeNil())
+		Expect(s.cleaning).To(BeNil())
 
 		By("starting first time")
-		Expect(s.StartCleaner()).To(Succeed())
-		Expect(s.cleaner).ToNot(BeNil())
-		Expect(s.cleaner.running()).To(BeTrue())
+		Expect(s.StartCleaning()).To(Succeed())
+		Expect(s.cleaning).ToNot(BeNil())
+		Expect(s.cleaning.isRunning()).To(BeTrue())
 
 		By("trying to start second time")
-		Expect(s.StartCleaner()).To(MatchError(ErrFailedToStartCleaner.detailed("already started")))
+		Expect(s.StartCleaning()).To(MatchError(ErrFailToStartCleaning.detailed("already started")))
 
 		By("waiting cleaning tick")
 		time.Sleep(110 * time.Millisecond)
@@ -274,20 +284,60 @@ var _ = Describe("store", func() {
 		Expect(s.items).To(HaveLen(1))
 		Expect(s.items).To(HaveKey("c"))
 
-		By("stopping cleaner first time")
-		Expect(s.StopCleaner()).To(Succeed())
-		Expect(s.cleaner).ToNot(BeNil())
-		Expect(s.cleaner.running()).To(BeFalse())
+		By("stopping cleaning first time")
+		Expect(s.StopCleaning()).To(Succeed())
+		Expect(s.cleaning).ToNot(BeNil())
+		Expect(s.cleaning.isRunning()).To(BeFalse())
 
 		By("checking expired not removed after tick time")
-		s.items["a"] = baseItem{expiry: c.Now().Add(-time.Nanosecond)}
+		s.items["a"] = baseItem{expiry: c.now().Add(-time.Nanosecond)}
 		time.Sleep(110 * time.Millisecond)
 		Expect(s.items).To(HaveLen(2))
 		Expect(s.items).To(HaveKey("a"))
 		Expect(s.items).To(HaveKey("c"))
 
-		By("stopping cleaner second time")
-		Expect(s.StopCleaner()).To(MatchError(ErrFailedToStopCleaner.detailed("already stopped")))
+		By("stopping cleaning second time")
+		Expect(s.StopCleaning()).To(MatchError(ErrFailToStopCleaning.detailed("already stopped")))
+	})
+	Specify("StartDumping and StopDumping", func() {
+		defer s.StopDumping()
+		s.params.DumpingPeriod = 100 * time.Millisecond
+
+		s.Set("k", "v", time.Second)
+		s.ListSet("lk", []string{"a", "b"}, 2*time.Second)
+		s.DictSet("dk", map[string]string{"dk": "dv"}, 3*time.Second)
+
+		By("not stated before")
+		Expect(s.dumping).To(BeNil())
+		d.expectNoCalls()
+
+		By("starting first time")
+		Expect(s.StartDumping()).To(Succeed())
+		Expect(s.dumping).ToNot(BeNil())
+		Expect(s.dumping.isRunning()).To(BeTrue())
+		d.expectNoCalls()
+
+		By("trying to start second time")
+		Expect(s.StartDumping()).To(MatchError(ErrFailToStartDumping.detailed("already started")))
+
+		By("waiting dumping tick")
+		time.Sleep(110 * time.Millisecond)
+
+		By("checking not expired items are dumped")
+		d.expectDump(s.items)
+		d.expectNoCalls()
+
+		By("stopping dumping first time")
+		Expect(s.StopDumping()).To(Succeed())
+		Expect(s.dumping).ToNot(BeNil())
+		Expect(s.dumping.isRunning()).To(BeFalse())
+
+		By("checking that after tick time no dump occured")
+		time.Sleep(110 * time.Millisecond)
+		d.expectNoCalls()
+
+		By("stopping dumping second time")
+		Expect(s.StopDumping()).To(MatchError(ErrFailToStopDumping.detailed("already stopped")))
 	})
 	Describe("get", func() {
 		Specify("expired item error", func() {
@@ -314,234 +364,97 @@ var _ = Describe("store", func() {
 		Expect(s.items).To(HaveLen(1))
 		Expect(s.items).To(HaveKey("c"))
 	})
+	Specify("dump", func() {
+		s.Set("k", "v", time.Second)
+		s.ListSet("lk", []string{"a", "b"}, 2*time.Second)
+		s.DictSet("dk", map[string]string{"dk": "dv"}, 3*time.Second)
+		s.dump()
+		d.expectDump(s.items)
+		d.expectNoCalls()
+	})
 	Specify("expiry", func() {
-		Expect(s.expiry(100 * time.Nanosecond)).To(Equal(c.Now().Add(100 * time.Nanosecond)))
-		Expect(s.expiry(0)).To(Equal(c.Now()))
-		Expect(s.expiry(-100 * time.Nanosecond)).To(Equal(c.Now().Add(-100 * time.Nanosecond)))
+		Expect(s.expiry(100 * time.Nanosecond)).To(Equal(c.now().Add(100 * time.Nanosecond)))
+		Expect(s.expiry(0)).To(Equal(c.now()))
+		Expect(s.expiry(-100 * time.Nanosecond)).To(Equal(c.now().Add(-100 * time.Nanosecond)))
 	})
 })
 
-func initBenchmarkStore(size int) (*store, error) {
-	if size < 1 {
-		return nil, errors.New("expected size > 0")
-	}
-	s, err := NewStore(Params{CleaningPeriod: 60 * time.Second}, testClock{})
-	if err != nil {
-		return nil, err
-	}
-	for i := 0; i < size; i++ {
-		switch i % 3 {
-		case 0:
-			s.Set("item"+strconv.Itoa(i), "value"+strconv.Itoa(i), time.Hour)
-		case 1:
-			var list []string
-			for j := 0; j < 10; j++ {
-				list = append(list, fmt.Sprintf("list item %d", j))
-			}
-			s.ListSet("item"+strconv.Itoa(i), list, time.Hour)
-		case 2:
-			dict := map[string]string{}
-			for j := 0; j < 10; j++ {
-				dict["dkey"+strconv.Itoa(j)] = "dict item " + strconv.Itoa(j)
-			}
-			s.DictSet("item"+strconv.Itoa(i), dict, time.Hour)
-		}
-	}
-	return s.(*store), nil
+type testClock time.Time
+
+func (tc testClock) now() time.Time {
+	return time.Time(tc)
 }
 
-func BenchmarkStore(b *testing.B) {
-	for _, size := range []int{
-		1,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				initBenchmarkStore(size)
-			}
-		})
-	}
+type testDumper struct {
+	calls []call
+	items items
+	error error
 }
 
-func BenchmarkStore_Get(b *testing.B) {
-	for _, size := range []int{
-		1,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err = s.Get("item0")
-				if err != nil {
-					b.Fatal("unexpected error: " + err.Error())
-					b.Fail()
-				}
-			}
-		})
-	}
+func (td *testDumper) newCall(f interface{}, args ...interface{}) {
+	td.calls = append(td.calls, call{
+		method: funcToName(f),
+		args:   args,
+	})
 }
 
-func BenchmarkStore_Set(b *testing.B) {
-	for _, size := range []int{
-		1,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				s.Set("key", "value", time.Hour)
-			}
-		})
+func (td *testDumper) popCall() call {
+	if len(td.calls) == 0 {
+		panic("no calls are left")
 	}
+	var c call
+	c, td.calls = td.calls[0], td.calls[1:]
+	return c
 }
 
-func BenchmarkStore_ListGet(b *testing.B) {
-	for _, size := range []int{
-		3,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := s.ListGet("item1", 0)
-				if err != nil {
-					b.Fatal("unexpected error: " + err.Error())
-					b.Fail()
-				}
-			}
-		})
-	}
+func (td *testDumper) expectNoCalls() {
+	ExpectWithOffset(1, td.calls).To(BeEmpty())
 }
 
-func BenchmarkStore_ListSet(b *testing.B) {
-	for _, size := range []int{
-		2,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				s.ListSet("key", []string{"a", "b", "c"}, time.Hour)
-			}
-		})
-	}
+func (td *testDumper) dump(items items) error {
+	td.newCall(td.dump, items)
+	return td.error
 }
 
-func BenchmarkStore_DictGet(b *testing.B) {
-	for _, size := range []int{
-		3,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := s.DictGet("item2", "dkey0")
-				if err != nil {
-					b.Fatal("unexpected error: " + err.Error())
-					b.Fail()
-				}
-			}
-		})
-	}
+func (td *testDumper) expectDump(items items) {
+	ExpectWithOffset(1, td.calls).ToNot(BeEmpty())
+	ExpectWithOffset(1, td.popCall()).To(beCall(td.dump, items))
 }
 
-func BenchmarkStore_DictSet(b *testing.B) {
-	for _, size := range []int{
-		3,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				s.DictSet("key", map[string]string{"a": "a", "b": "b", "c": "c"}, time.Hour)
-			}
-		})
+func (td *testDumper) load() (items, error) {
+	td.newCall(td.load)
+	if td.items == nil {
+		td.items = items{}
 	}
+	return td.items, td.error
 }
 
-func BenchmarkStore_Remove(b *testing.B) {
-	for _, size := range []int{
-		1,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				s.Remove("item0")
-			}
-		})
-	}
+func (td *testDumper) expectLoad() {
+	ExpectWithOffset(1, td.calls).ToNot(BeEmpty())
+	ExpectWithOffset(1, td.popCall()).To(beCall(td.load))
 }
 
-func BenchmarkStore_Keys(b *testing.B) {
-	var keys []string
-	for _, size := range []int{
-		1,
-		1000,
-		10000,
-		100000,
-	} {
-		b.Run(fmt.Sprintf("with store size %d", size), func(b *testing.B) {
-			s, err := initBenchmarkStore(size)
-			if err != nil {
-				b.Fatal("failed to init store: " + err.Error())
-				b.FailNow()
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				keys = s.Keys()
-			}
-		})
+type call struct {
+	method string
+	args   []interface{}
+}
+
+func beCall(method interface{}, args ...interface{}) types.GomegaMatcher {
+	methodMatcher := WithTransform(func(c interface{}) string {
+		return c.(call).method
+	}, BeIdenticalTo(funcToName(method)))
+	argsMatcher := BeEmpty()
+	if len(args) > 0 {
+		argsMatcher = Equal(args)
 	}
+	return And(methodMatcher, WithTransform(func(c interface{}) []interface{} {
+		return c.(call).args
+	}, argsMatcher))
+}
+
+func funcToName(f interface{}) string {
+	name := runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+	name = strings.TrimPrefix(name, "github.com/someanon/yamc/")
+	name = strings.TrimSuffix(name, "-fm")
+	return name
 }

@@ -1,6 +1,8 @@
 package store
 
-import "time"
+import (
+	"time"
+)
 
 // item is store item
 type item interface {
@@ -9,6 +11,8 @@ type item interface {
 	listValue(i int) (string, error)
 	dictValue(k string) (string, error)
 }
+
+type items map[string]item
 
 // baseItem is general store item
 type baseItem struct {
