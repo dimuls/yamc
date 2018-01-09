@@ -42,11 +42,11 @@ Path to dump file. If file exists on service start store items are loaded from i
 ## Running
 
 ```bash
-$ yamc -accounts ./accounts -cleaning-period 60s
+$ yamc --accounts-path ./accounts --cleaning-period 60s --dumping-period 10m --dump-path ./dump
 ```
 
 Runs on port 8080. No root privileges required.
 
-## Server documentation
+## API documentation
 
 Located [here](https://github.com/someanon/yamc/tree/master/server).
