@@ -545,6 +545,15 @@ var _ = Describe("Router", func() {
 			Expect(res.Code).To(Equal(http.StatusOK))
 			Expect(res.Body.String()).To(BeEmpty())
 		})
+		Specify("success with body 2", func() {
+			rq := req("key=dkey", "ttl=2h")
+			rq.Body = body("dk1: dv1\ndk2: dv2\n")
+			r.ServeHTTP(res, rq)
+			s.expectDictSet("dkey", map[string]string{"dk1": "dv1", "dk2": "dv2"}, 2*time.Hour)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusOK))
+			Expect(res.Body.String()).To(BeEmpty())
+		})
 	})
 	Describe("delete", func() {
 		BeforeEach(func() {

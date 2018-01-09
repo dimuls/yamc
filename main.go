@@ -58,7 +58,6 @@ func main() {
 	gin.SetMode("release")
 
 	r := server.NewRouter(a, s)
-	r.Use(gin.Recovery())
 
 	if err := r.Run(); err != nil {
 		panic("failed to gin.Engine.Run(): " + err.Error())

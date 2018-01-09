@@ -15,7 +15,7 @@ import (
 func NewRouter(a gin.Accounts, st store.Store) *gin.Engine {
 	s := &server{store: st}
 
-	r := gin.New()
+	r := gin.Default()
 
 	ar := r.Group("/", gin.BasicAuth(a))
 
@@ -59,7 +59,7 @@ func (s *server) getKey(c *gin.Context) {
 		case store.ErrKeyNotExists, store.ErrNotKeyItem:
 			c.AbortWithStatus(http.StatusNotFound)
 		default:
-			c.AbortWithError(http.StatusInternalServerError, err)
+			c.AbortWithError(http.StatusInternalServerError, errStoreError.causedBy(err))
 		}
 		return
 	}
@@ -75,17 +75,17 @@ func (s *server) putKey(c *gin.Context) {
 	}
 	ttlStr, exists := c.GetQuery("ttl")
 	if !exists {
-		c.AbortWithError(http.StatusBadRequest, errTTLRrequired)
+		c.AbortWithError(http.StatusBadRequest, errTTLRequired)
 		return
 	}
 	ttl, err := time.ParseDuration(ttlStr)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errInvalidTTL)
+		c.AbortWithError(http.StatusBadRequest, errInvalidTTL.causedBy(err))
 		return
 	}
 	valueBts, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		c.AbortWithError(http.StatusInternalServerError, errFailToReadAllBody.causedBy(err))
 		return
 	}
 	s.store.Set(key, string(valueBts), ttl)
@@ -97,17 +97,17 @@ func (s *server) putKey(c *gin.Context) {
 func (s *server) getList(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.AbortWithError(http.StatusBadRequest, errKeyRequired)
 		return
 	}
 	indexStr, exists := c.GetQuery("index")
 	if !exists {
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.AbortWithError(http.StatusBadRequest, errIndexRequired)
 		return
 	}
 	index, err := strconv.Atoi(indexStr)
 	if err != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.AbortWithError(http.StatusBadRequest, errInvalidIndex.causedBy(err))
 		return
 	}
 	value, err := s.store.ListGet(key, index)
@@ -116,9 +116,9 @@ func (s *server) getList(c *gin.Context) {
 		case store.ErrKeyNotExists, store.ErrNotListItem, store.ErrListIndexNotExists:
 			c.AbortWithStatus(http.StatusNotFound)
 		case store.ErrInvalidListIndex:
-			c.AbortWithError(http.StatusBadRequest, err)
+			c.AbortWithError(http.StatusBadRequest, errStoreError.causedBy(err))
 		default:
-			c.AbortWithError(http.StatusInternalServerError, err)
+			c.AbortWithError(http.StatusInternalServerError, errStoreError.causedBy(err))
 		}
 	}
 	c.String(http.StatusOK, value)
@@ -134,22 +134,22 @@ func (s *server) putList(c *gin.Context) {
 	}
 	ttlStr, exists := c.GetQuery("ttl")
 	if !exists {
-		c.AbortWithError(http.StatusBadRequest, errTTLRrequired)
+		c.AbortWithError(http.StatusBadRequest, errTTLRequired)
 		return
 	}
 	ttl, err := time.ParseDuration(ttlStr)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errInvalidTTL)
+		c.AbortWithError(http.StatusBadRequest, errInvalidTTL.causedBy(err))
 		return
 	}
 	listYAML, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		c.AbortWithError(http.StatusInternalServerError, errFailToReadAllBody.causedBy(err))
 		return
 	}
 	var list []string
 	if err := yaml.Unmarshal(listYAML, &list); err != nil {
-		c.AbortWithError(http.StatusBadRequest, errInvalidListYAML)
+		c.AbortWithError(http.StatusBadRequest, errInvalidListYAML.causedBy(err))
 		return
 	}
 	s.store.ListSet(key, list, ttl)
@@ -161,12 +161,12 @@ func (s *server) putList(c *gin.Context) {
 func (s *server) getDict(c *gin.Context) {
 	key, exists := c.GetQuery("key")
 	if !exists {
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.AbortWithError(http.StatusBadRequest, errKeyRequired)
 		return
 	}
 	dkey, exists := c.GetQuery("dkey")
 	if !exists {
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.AbortWithError(http.StatusBadRequest, errDKeyRequired)
 		return
 	}
 	value, err := s.store.DictGet(key, dkey)
@@ -175,7 +175,7 @@ func (s *server) getDict(c *gin.Context) {
 		case store.ErrKeyNotExists, store.ErrNotDictItem, store.ErrDictKeyNotExists:
 			c.AbortWithStatus(http.StatusNotFound)
 		default:
-			c.AbortWithError(http.StatusInternalServerError, err)
+			c.AbortWithError(http.StatusInternalServerError, errStoreError.causedBy(err))
 		}
 	}
 	c.String(http.StatusOK, value)
@@ -191,22 +191,22 @@ func (s *server) putDict(c *gin.Context) {
 	}
 	ttlStr, exists := c.GetQuery("ttl")
 	if !exists {
-		c.AbortWithError(http.StatusBadRequest, errTTLRrequired)
+		c.AbortWithError(http.StatusBadRequest, errTTLRequired)
 		return
 	}
 	ttl, err := time.ParseDuration(ttlStr)
 	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errInvalidTTL)
+		c.AbortWithError(http.StatusBadRequest, errInvalidTTL.causedBy(err))
 		return
 	}
 	dictYAML, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		c.AbortWithError(http.StatusInternalServerError, errFailToReadAllBody.causedBy(err))
 		return
 	}
 	var dict map[string]string
 	if err := yaml.Unmarshal(dictYAML, &dict); err != nil {
-		c.AbortWithError(http.StatusBadRequest, errInvalidDictYAML)
+		c.AbortWithError(http.StatusBadRequest, errInvalidDictYAML.causedBy(err))
 		return
 	}
 	s.store.DictSet(key, dict, ttl)
