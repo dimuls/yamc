@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -31,15 +32,20 @@ var _ = Describe("Router", func() {
 		if len(params) > 0 {
 			query += "?" + strings.Join(params, "&")
 		}
-		return httptest.NewRequest(method, query, nil)
+		req := httptest.NewRequest(method, query, nil)
+		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("test:test")))
+		return req
 	}
 	body := func(body string) io.ReadCloser {
 		return ioutil.NopCloser(strings.NewReader(body))
 	}
 	BeforeEach(func() {
 		s = &testStore{}
-		r = NewRouter(s)
+		r = NewRouter(gin.Accounts{"test": "test"}, s)
 		res = httptest.NewRecorder()
+	})
+	Describe("access without authorization returns 401 error", func() {
+
 	})
 	Describe("getKey", func() {
 		BeforeEach(func() {
@@ -50,7 +56,7 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, req())
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store key not exists error", func() {
 			s.error = store.ErrKeyNotExists
@@ -58,7 +64,7 @@ var _ = Describe("Router", func() {
 			s.expectGet("a")
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store not key item error", func() {
 			s.error = store.ErrNotKeyItem
@@ -66,7 +72,7 @@ var _ = Describe("Router", func() {
 			s.expectGet("a")
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("other store error", func() {
 			s.error = errors.New("error")
@@ -74,7 +80,16 @@ var _ = Describe("Router", func() {
 			s.expectGet("a")
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusInternalServerError))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
+		})
+		Specify("authorization error", func() {
+			s.value = "v"
+			rq := req("key=a")
+			rq.Header.Del("Authorization")
+			r.ServeHTTP(res, rq)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success", func() {
 			s.value = "v"
@@ -102,25 +117,25 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, req())
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("no ttl query param error", func() {
 			r.ServeHTTP(res, req("key=a"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("empty ttl error", func() {
 			r.ServeHTTP(res, req("key=a", "ttl="))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("ttl parse error", func() {
 			r.ServeHTTP(res, req("key=a", "ttl=asd"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body read error", func() {
 			rq := req("key=a", "ttl=10s")
@@ -128,7 +143,16 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusInternalServerError))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
+		})
+		Specify("authorization error", func() {
+			rq := req("key=a", "ttl=10s")
+			rq.Body = body("v")
+			rq.Header.Del("Authorization")
+			r.ServeHTTP(res, rq)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with empty key", func() {
 			rq := req("key=", "ttl=10s")
@@ -137,14 +161,14 @@ var _ = Describe("Router", func() {
 			s.expectSet("", "v", 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with empty body", func() {
 			r.ServeHTTP(res, req("key=a", "ttl=10s"))
 			s.expectSet("a", "", 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with body", func() {
 			rq := req("key=a", "ttl=10s")
@@ -153,7 +177,7 @@ var _ = Describe("Router", func() {
 			s.expectSet("a", "v", 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 	})
 	Describe("getList", func() {
@@ -165,19 +189,19 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, req())
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("no index query param error", func() {
 			r.ServeHTTP(res, req("key=a"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("index parse error", func() {
 			r.ServeHTTP(res, req("key=a", "index=asd"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store key not exists error", func() {
 			s.error = store.ErrKeyNotExists
@@ -185,7 +209,7 @@ var _ = Describe("Router", func() {
 			s.expectListGet("a", 0)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store not list item error", func() {
 			s.error = store.ErrNotListItem
@@ -193,7 +217,7 @@ var _ = Describe("Router", func() {
 			s.expectListGet("a", 0)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store list index not exists error", func() {
 			s.error = store.ErrListIndexNotExists
@@ -201,7 +225,7 @@ var _ = Describe("Router", func() {
 			s.expectListGet("a", 1)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store invalid list index error", func() {
 			s.error = store.ErrInvalidListIndex
@@ -209,7 +233,7 @@ var _ = Describe("Router", func() {
 			s.expectListGet("a", -1)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("other store error", func() {
 			s.error = errors.New("error")
@@ -217,7 +241,16 @@ var _ = Describe("Router", func() {
 			s.expectListGet("a", 5)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusInternalServerError))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
+		})
+		Specify("authorization error", func() {
+			s.value = "v"
+			rq := req("key=a", "index=10")
+			rq.Header.Del("Authorization")
+			r.ServeHTTP(res, rq)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success", func() {
 			s.value = "v"
@@ -245,25 +278,25 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, req())
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("no ttl query param error", func() {
 			r.ServeHTTP(res, req("key=a"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("empty ttl error", func() {
 			r.ServeHTTP(res, req("key=a", "ttl="))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("ttl parse error", func() {
 			r.ServeHTTP(res, req("key=a", "ttl=asd"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body read error", func() {
 			rq := req("key=a", "ttl=10s")
@@ -271,7 +304,7 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusInternalServerError))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body YAML list parse error", func() {
 			rq := req("key=", "ttl=10s")
@@ -279,7 +312,7 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body YAML list parse error", func() {
 			rq := req("key=", "ttl=10s")
@@ -287,7 +320,7 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body YAML list parse error", func() {
 			rq := req("key=", "ttl=10s")
@@ -295,7 +328,16 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
+		})
+		Specify("authorization error", func() {
+			rq := req("key=a", "ttl=10s")
+			rq.Body = body("- a\n- b")
+			rq.Header.Del("Authorization")
+			r.ServeHTTP(res, rq)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with empty key", func() {
 			rq := req("key=", "ttl=10s")
@@ -304,7 +346,7 @@ var _ = Describe("Router", func() {
 			s.expectListSet("", []string{"a", "b"}, 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with empty body", func() {
 			rq := req("key=a", "ttl=10s")
@@ -312,7 +354,7 @@ var _ = Describe("Router", func() {
 			s.expectListSet("a", nil, 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with body", func() {
 			rq := req("key=a", "ttl=10s")
@@ -321,7 +363,7 @@ var _ = Describe("Router", func() {
 			s.expectListSet("a", []string{"a", "b"}, 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 	})
 	Describe("getDict", func() {
@@ -333,13 +375,13 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, req())
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("no dkey query param error", func() {
 			r.ServeHTTP(res, req("key=a"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store key not exists error", func() {
 			s.error = store.ErrKeyNotExists
@@ -347,7 +389,7 @@ var _ = Describe("Router", func() {
 			s.expectDictGet("a", "b")
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store not dict item error", func() {
 			s.error = store.ErrNotDictItem
@@ -355,7 +397,7 @@ var _ = Describe("Router", func() {
 			s.expectDictGet("a", "b")
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("store dict key not exists error", func() {
 			s.error = store.ErrDictKeyNotExists
@@ -363,7 +405,7 @@ var _ = Describe("Router", func() {
 			s.expectDictGet("a", "b")
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusNotFound))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("other store error", func() {
 			s.error = errors.New("error")
@@ -371,7 +413,16 @@ var _ = Describe("Router", func() {
 			s.expectDictGet("a", "b")
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusInternalServerError))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
+		})
+		Specify("authorization error", func() {
+			s.value = "v"
+			rq := req("key=a", "dkey=b")
+			rq.Header.Del("Authorization")
+			r.ServeHTTP(res, rq)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success", func() {
 			s.value = "v"
@@ -407,25 +458,25 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, req())
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("no ttl query param error", func() {
 			r.ServeHTTP(res, req("key=a"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("empty ttl error", func() {
 			r.ServeHTTP(res, req("key=a", "ttl="))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("ttl parse error", func() {
 			r.ServeHTTP(res, req("key=a", "ttl=asd"))
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body read error", func() {
 			rq := req("key=a", "ttl=10s")
@@ -433,7 +484,7 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusInternalServerError))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body YAML dict parse error", func() {
 			rq := req("key=", "ttl=10s")
@@ -441,7 +492,7 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body YAML dict parse error", func() {
 			rq := req("key=", "ttl=10s")
@@ -449,7 +500,7 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("body YAML dict parse error", func() {
 			rq := req("key=", "ttl=10s")
@@ -457,7 +508,16 @@ var _ = Describe("Router", func() {
 			r.ServeHTTP(res, rq)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusBadRequest))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
+		})
+		Specify("authorization error", func() {
+			rq := req("key=a", "ttl=10s")
+			rq.Body = body("a: a\nb: b")
+			rq.Header.Del("Authorization")
+			r.ServeHTTP(res, rq)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with empty key", func() {
 			rq := req("key=", "ttl=10s")
@@ -466,7 +526,7 @@ var _ = Describe("Router", func() {
 			s.expectDictSet("", map[string]string{"a": "a", "b": "b"}, 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with empty body", func() {
 			rq := req("key=a", "ttl=10s")
@@ -474,7 +534,7 @@ var _ = Describe("Router", func() {
 			s.expectDictSet("a", nil, 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success with body", func() {
 			rq := req("key=a", "ttl=10s")
@@ -483,7 +543,7 @@ var _ = Describe("Router", func() {
 			s.expectDictSet("a", map[string]string{"a": "a", "b": "b"}, 10*time.Second)
 			s.expectNoCalls()
 			Expect(res.Code).To(Equal(http.StatusOK))
-			Expect(res.Body.Len()).To(BeZero())
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 	})
 	Describe("delete", func() {
@@ -498,14 +558,22 @@ var _ = Describe("Router", func() {
 				r.ServeHTTP(res, req())
 				s.expectNoCalls()
 				Expect(res.Code).To(Equal(http.StatusBadRequest))
-				Expect(res.Body.Len()).To(BeZero())
+				Expect(res.Body.String()).To(BeEmpty())
+			})
+			Specify("authorization error", func() {
+				rq := req("key=a")
+				rq.Header.Del("Authorization")
+				r.ServeHTTP(res, rq)
+				s.expectNoCalls()
+				Expect(res.Code).To(Equal(http.StatusUnauthorized))
+				Expect(res.Body.String()).To(BeEmpty())
 			})
 			Specify("success", func() {
 				r.ServeHTTP(res, req("key=a"))
 				s.expectRemove("a")
 				s.expectNoCalls()
 				Expect(res.Code).To(Equal(http.StatusOK))
-				Expect(res.Body.Len()).To(BeZero())
+				Expect(res.Body.String()).To(BeEmpty())
 			})
 		})
 		Describe("list", func() {
@@ -516,14 +584,22 @@ var _ = Describe("Router", func() {
 				r.ServeHTTP(res, req())
 				s.expectNoCalls()
 				Expect(res.Code).To(Equal(http.StatusBadRequest))
-				Expect(res.Body.Len()).To(BeZero())
+				Expect(res.Body.String()).To(BeEmpty())
+			})
+			Specify("authorization error", func() {
+				rq := req("key=a")
+				rq.Header.Del("Authorization")
+				r.ServeHTTP(res, rq)
+				s.expectNoCalls()
+				Expect(res.Code).To(Equal(http.StatusUnauthorized))
+				Expect(res.Body.String()).To(BeEmpty())
 			})
 			Specify("success", func() {
 				r.ServeHTTP(res, req("key=a"))
 				s.expectRemove("a")
 				s.expectNoCalls()
 				Expect(res.Code).To(Equal(http.StatusOK))
-				Expect(res.Body.Len()).To(BeZero())
+				Expect(res.Body.String()).To(BeEmpty())
 			})
 		})
 		Describe("dict", func() {
@@ -534,14 +610,22 @@ var _ = Describe("Router", func() {
 				r.ServeHTTP(res, req())
 				s.expectNoCalls()
 				Expect(res.Code).To(Equal(http.StatusBadRequest))
-				Expect(res.Body.Len()).To(BeZero())
+				Expect(res.Body.String()).To(BeEmpty())
+			})
+			Specify("authorization error", func() {
+				rq := req("key=a")
+				rq.Header.Del("Authorization")
+				r.ServeHTTP(res, rq)
+				s.expectNoCalls()
+				Expect(res.Code).To(Equal(http.StatusUnauthorized))
+				Expect(res.Body.String()).To(BeEmpty())
 			})
 			Specify("success", func() {
 				r.ServeHTTP(res, req("key=a"))
 				s.expectRemove("a")
 				s.expectNoCalls()
 				Expect(res.Code).To(Equal(http.StatusOK))
-				Expect(res.Body.Len()).To(BeZero())
+				Expect(res.Body.String()).To(BeEmpty())
 			})
 		})
 	})
@@ -549,6 +633,15 @@ var _ = Describe("Router", func() {
 		BeforeEach(func() {
 			method = http.MethodGet
 			path = "/keys"
+		})
+		Specify("authorization error", func() {
+			s.keys = []string{"a", "b", "c"}
+			rq := req()
+			rq.Header.Del("Authorization")
+			r.ServeHTTP(res, rq)
+			s.expectNoCalls()
+			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+			Expect(res.Body.String()).To(BeEmpty())
 		})
 		Specify("success when no keys", func() {
 			r.ServeHTTP(res, req())

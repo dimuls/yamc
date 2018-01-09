@@ -1,8 +1,9 @@
 # yamc Server
 
-Based on [gin](https://github.com/gin-gonic/gin) web framework. Uses [yamc.Store](https://github.com/someanon/yamc/tree/master/store) as store backend. Has [go client](https://github.com/someanon/yamc/tree/master/client).
+Based on [gin](https://github.com/gin-gonic/gin) web framework. Uses [yamc.Store](https://github.com/someanon/yamc/tree/master/store) as store backend. Has [go client](https://github.com/someanon/yamc/tree/master/client). 
 
 # API documentation
+All methods require [HTTP Basic Authorization](https://en.wikipedia.org/wiki/Basic_access_authentication).
 
 ## Get key
 Return value by key

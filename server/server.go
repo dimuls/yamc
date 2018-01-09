@@ -12,24 +12,30 @@ import (
 )
 
 // NewRouter creates gin router with server with binded routes and handlers
-func NewRouter(st store.Store) *gin.Engine {
+func NewRouter(a gin.Accounts, st store.Store) *gin.Engine {
 	s := &server{store: st}
 
 	r := gin.New()
 
-	r.GET("/key", s.getKey)
-	r.PUT("/key", s.putKey)
-	r.DELETE("/key", s.delete)
+	ar := r.Group("/", gin.BasicAuth(a))
 
-	r.GET("/list", s.getList)
-	r.PUT("/list", s.putList)
-	r.DELETE("/list", s.delete)
+	r.NoRoute(func(c *gin.Context) {
+		c.AbortWithStatus(http.StatusNotFound)
+	})
 
-	r.GET("/dict", s.getDict)
-	r.PUT("/dict", s.putDict)
-	r.DELETE("/dict", s.delete)
+	ar.GET("/key", s.getKey)
+	ar.PUT("/key", s.putKey)
+	ar.DELETE("/key", s.delete)
 
-	r.GET("/keys", s.getKeys)
+	ar.GET("/list", s.getList)
+	ar.PUT("/list", s.putList)
+	ar.DELETE("/list", s.delete)
+
+	ar.GET("/dict", s.getDict)
+	ar.PUT("/dict", s.putDict)
+	ar.DELETE("/dict", s.delete)
+
+	ar.GET("/keys", s.getKeys)
 
 	return r
 }
