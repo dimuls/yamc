@@ -46,3 +46,7 @@ $ yamc -accounts ./accounts -cleaning-period 60s
 ```
 
 Runs on port 8080. No root privileges required.
+
+## Server documentation
+
+Located [here](https://github.com/someanon/yamc/tree/master/server).
